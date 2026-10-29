@@ -1,5 +1,5 @@
-const CACHE = 'knn-tracker-v2';
-const SHELL = ['./', 'index.html', 'style.css', 'js/app.js', 'js/crypto.js', 'js/lessons.js', 'icon.svg', 'manifest.webmanifest'];
+const CACHE = 'knn-tracker-v3';
+const SHELL = ['./', 'index.html', 'style.css', 'js/app.js', 'js/admin.js', 'js/crypto.js', 'js/lessons.js', 'icon.svg', 'manifest.webmanifest'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));

@@ -16,10 +16,10 @@
   <section id="login" class="login">
     <img src="icon.svg" alt="" width="64" height="64">
     <h1>КНН трекер</h1>
-    <p class="muted">Группа 3426А. Личный вход — расписание закрыто паролем.</p>
+    <p class="muted">Личный вход. Логин и пароль выдаёт Всеволод.</p>
     <form id="loginForm">
       <label>Логин
-        <input id="loginUser" type="text" name="username" autocomplete="username" value="vsevolod" required>
+        <input id="loginUser" type="text" name="username" autocomplete="username" autocapitalize="off" spellcheck="false" required>
       </label>
       <label>Пароль
         <input id="loginPass" type="password" name="password" autocomplete="current-password" placeholder="Пароль" required>
@@ -34,6 +34,7 @@
     <header class="top">
       <div>
         <div class="title">КНН трекер</div>
+        <div id="who" class="muted small"></div>
         <div id="clock" class="muted small"></div>
       </div>
       <button id="reloadBtn" class="icon-btn" title="Обновить" aria-label="Обновить">⟳</button>
@@ -79,13 +80,6 @@
           <label>Аудитория / ссылка<input id="lPlace" autocomplete="off"></label>
           <button class="btn primary" type="submit">Сохранить пару</button>
         </form>
-        <div class="card form">
-          <h2>Группа</h2>
-          <label>Номер группы
-            <select id="groupSelect"></select>
-          </label>
-          <p class="muted small">По умолчанию 3426А. Выбор хранится на этом телефоне.</p>
-        </div>
         <div class="card">
           <h2>Быстрые ссылки</h2>
           <div id="links" class="links"></div>
@@ -102,10 +96,71 @@
             <button id="resetLocalBtn" class="btn" type="button">Сбросить правки на телефоне</button>
           </div>
         </div>
+      </section>
+
+      <section data-view="profile" hidden>
+        <form id="profileForm" class="card form">
+          <h2>Профиль</h2>
+          <p class="muted small">ФИО и группа показываются в шапке и копируются как имя для входа в комнату пары.</p>
+          <label>ФИО
+            <input id="pFio" required autocomplete="name" placeholder="Фамилия Имя Отчество">
+          </label>
+          <label>Группа
+            <input id="pGroup" list="groupOptions" required placeholder="3426А" autocomplete="off">
+          </label>
+          <datalist id="groupOptions"></datalist>
+          <button class="btn primary" type="submit">Сохранить</button>
+        </form>
+        <div class="card form">
+          <h2>Вход на пару</h2>
+          <p class="muted small">Нажми «Войти» у пары — имя копируется в буфер. Вставь его в поле «Имя» комнаты.</p>
+          <div id="joinNameBox" class="secret"></div>
+          <div class="links">
+            <button id="copyJoinBtn" class="btn" type="button">Скопировать имя</button>
+            <button id="copyChatBtn" class="btn" type="button">Скопировать «я на паре»</button>
+          </div>
+        </div>
         <div class="card form">
           <h2>Сессия</h2>
           <p id="sessionInfo" class="muted small"></p>
           <button id="logoutBtn" class="btn danger" type="button">Выйти на этом устройстве</button>
+        </div>
+      </section>
+
+      <section data-view="admin" hidden>
+        <p id="adminWarn" class="card error" hidden></p>
+        <div class="card">
+          <h2>Люди</h2>
+          <p class="muted small">Логин, пароль и группу задаёшь ты. Человек входит этими данными — свой пароль придумать не может.</p>
+          <div id="aUsers"></div>
+          <form id="userForm" class="form inline-form">
+            <label>Логин
+              <input id="uLogin" required autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="anna">
+            </label>
+            <label>Пароль
+              <div class="pass-row">
+                <input id="uPass" type="text" required autocomplete="off" spellcheck="false">
+                <button id="uPassGen" class="btn" type="button">Сгенерировать</button>
+              </div>
+            </label>
+            <label>ФИО
+              <input id="uFio" required placeholder="Фамилия Имя Отчество" autocomplete="off">
+            </label>
+            <label>Группа
+              <input id="uGroup" list="groupOptions" required placeholder="3426А" autocomplete="off">
+            </label>
+            <button class="btn primary" type="submit">Добавить человека</button>
+          </form>
+          <div id="uResult" class="card hero" hidden></div>
+        </div>
+        <div class="card form">
+          <h2>Доступ GitHub</h2>
+          <p class="muted small">Fine-grained токен с правом Contents: Read and write к репозиторию <code>Xrex-collab/knn-tracker</code>. Без него новый человек не попадёт в <code>auth.json</code> на сайте. Токен хранится только на этом устройстве.</p>
+          <label>Токен
+            <input id="tokenInput" type="password" placeholder="github_pat_…" autocomplete="off">
+          </label>
+          <button id="saveToken" class="btn" type="button">Сохранить токен</button>
+          <p id="writeStatus" class="small"></p>
         </div>
       </section>
     </main>
@@ -114,6 +169,8 @@
       <button data-tab="today" class="active">Сегодня</button>
       <button data-tab="week">Неделя</button>
       <button data-tab="more">Ещё</button>
+      <button data-tab="profile">Профиль</button>
+      <button data-tab="admin" id="adminTab" hidden>Админ</button>
     </nav>
   </div>
   <div id="toast" class="toast" hidden></div>

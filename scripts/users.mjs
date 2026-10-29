@@ -1,6 +1,6 @@
 // Пользователи сайта. Пароль в репозиторий не кладём — только PBKDF2-хеш и обёртка DATA_KEY.
 //
-//   DATA_KEY=... node scripts/users.mjs add vsevolod "Всеволод Спивак" [--password X]
+//   node scripts/users.mjs add anna "Анна Иванова" --group 3426А --password '...'
 //   node scripts/users.mjs password vsevolod --old OLD --password NEW
 //   DATA_KEY=... node scripts/users.mjs encrypt
 import { randomBytes } from 'node:crypto';
@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import { AUTH_FILE, ROOT, SCHEDULE_ENC_FILE, SCHEDULE_PLAIN_FILE, readJSON, writeJSON } from './lib/common.mjs';
 import { dataKey, loadSecrets } from './lib/secrets.mjs';
 import { encryptJSON, unwrapKey, wrapKey } from '../docs/js/crypto.js';
+import { normGroup } from '../docs/js/lessons.js';
 
 loadSecrets();
 
@@ -23,7 +24,7 @@ function findUser(auth, username) {
 
 function printHelp() {
   console.log(`Команды:
-  add <логин> "<имя>" [--password X]   новый пользователь (нужен DATA_KEY)
+  add <логин> "<ФИО>" --group 3426А [--password X] [--admin]
   password <логин> --old OLD --password NEW
   encrypt                              шифрует state/schedule-data.json → docs/data/schedule.json
 `);
@@ -35,18 +36,36 @@ const flag = (name) => {
   return i >= 0 ? args[i + 1] : undefined;
 };
 
+async function resolveDataKey(auth) {
+  try { return dataKey(); } catch {}
+  const old = flag('--old') || process.env.TRACKER_PASSWORD;
+  if (!old) {
+    throw new Error('Нужен DATA_KEY (secrets.local.txt) или --old / TRACKER_PASSWORD — пароль Всеволода');
+  }
+  const admin = auth.users.find(u => u.role === 'admin') || findUser(auth, 'vsevolod');
+  if (!admin) throw new Error('В auth.json нет администратора vsevolod');
+  return unwrapKey(admin, old);
+}
+
 if (cmd === 'add') {
-  const username = args[0];
+  const username = String(args[0] || '').trim().toLowerCase();
   const name = args[1];
-  if (!username || !name || name.startsWith('--')) throw new Error('Нужно: add <логин> "<имя>" [--password X]');
+  if (!username || !name || name.startsWith('--')) {
+    throw new Error('Нужно: add <логин> "<ФИО>" --group 3426А [--password X]');
+  }
+  if (!/^[a-z0-9._-]{2,32}$/.test(username)) {
+    throw new Error('Логин: латиница, цифры, точка, 2–32 символа');
+  }
+  const group = normGroup(flag('--group') || '3426А');
   const password = flag('--password') || randomBytes(12).toString('base64url');
-  const key = dataKey();
   const auth = authFile();
   if (findUser(auth, username)) throw new Error(`Пользователь ${username} уже есть`);
+  const key = await resolveDataKey(auth);
   const wrapped = await wrapKey(key, password);
-  auth.users.push({ username, name, ...wrapped });
+  const role = args.includes('--admin') || username === 'vsevolod' ? 'admin' : 'user';
+  auth.users.push({ username, name, group, role, ...wrapped });
   writeJSON(AUTH_FILE, auth);
-  console.log(`${name} (${username}): пароль задан. Хеш записан в docs/auth.json`);
+  console.log(`${name} (${username}, ${group}): пароль задан. Хеш записан в docs/auth.json`);
   if (!flag('--password')) console.log(`Пароль: ${password}`);
 } else if (cmd === 'password') {
   const username = args[0];

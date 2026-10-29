@@ -1,7 +1,7 @@
 import { decryptJSON, unwrapKey } from './crypto.js';
 import {
   addDays, blocksForDate, collegeNow, dayTitle, daysOf, groupList, setTimezone,
-  todayISO, upcomingBlocks,
+  todayISO, upcomingBlocks, normGroup,
 } from './lessons.js';
 
 const $ = sel => document.querySelector(sel);
@@ -13,11 +13,14 @@ const LS = {
   del(k) { try { localStorage.removeItem(k); } catch {} },
 };
 const SESSION_KEY = 'knn.session';
+const TOKEN_KEY = 'knn.ghToken';
+const LAST_USER_KEY = 'knn.lastUser';
 
-let config = { group: '3426А', timezoneOffsetHours: 3, links: [] };
+let config = { group: '3426А', timezoneOffsetHours: 3, links: [], repo: 'Xrex-collab/knn-tracker' };
 let base = null;
 let local = null;
 let session = null;
+let admin = null;
 let started = false;
 let weekStart = mondayOf(todayISO());
 
@@ -29,6 +32,87 @@ function saveSession(next) {
   session = next;
   if (next) LS.set(SESSION_KEY, JSON.stringify(next));
   else LS.del(SESSION_KEY);
+}
+
+function profileKey() {
+  return session?.username ? `knn.profile.${session.username}` : null;
+}
+
+function profile() {
+  const key = profileKey();
+  if (key) {
+    try {
+      const raw = LS.get(key);
+      if (raw) {
+        const p = JSON.parse(raw);
+        return { fio: p.fio || '', group: normGroup(p.group || '') };
+      }
+    } catch {}
+  }
+  return {
+    fio: session?.name || '',
+    group: normGroup(session?.group || LS.get('group') || config.group || '3426А'),
+  };
+}
+
+function saveProfile(next) {
+  const p = {
+    fio: String(next.fio || '').trim().replace(/\s+/g, ' '),
+    group: normGroup(next.group || config.group || '3426А'),
+  };
+  const key = profileKey();
+  if (key) LS.set(key, JSON.stringify(p));
+  LS.set('group', p.group);
+  if (session) {
+    session.name = p.fio;
+    session.group = p.group;
+    saveSession(session);
+  }
+  return p;
+}
+
+function seedProfile(user) {
+  if (profileKey() && LS.get(profileKey())) return;
+  saveProfile({
+    fio: user.name || '',
+    group: user.group || LS.get('group') || config.group || '3426А',
+  });
+}
+
+function group() {
+  return profile().group || config.group || '3426А';
+}
+
+function fio() {
+  return profile().fio || session?.name || '';
+}
+
+function isAdmin() {
+  return session?.role === 'admin' || String(session?.username || '').toLowerCase() === 'vsevolod';
+}
+
+function joinName() {
+  return [fio(), group()].filter(Boolean).join(' ');
+}
+
+function chatText() {
+  return `${fio() || 'Я'}, я на паре`;
+}
+
+function repo() {
+  return config.repo || 'Xrex-collab/knn-tracker';
+}
+
+function token() {
+  return LS.get(TOKEN_KEY) || '';
+}
+
+function canWrite() {
+  return Boolean(token() && repo());
+}
+
+function ghHeaders() {
+  return { Authorization: `Bearer ${token()}`, Accept: 'application/vnd.github+json' };
 }
 
 function mondayOf(iso) {
@@ -47,10 +131,6 @@ function schedule() {
     timezoneOffsetHours: base?.timezoneOffsetHours ?? config.timezoneOffsetHours ?? 3,
     groups,
   };
-}
-
-function group() {
-  return LS.get('group') || config.group || '3426А';
 }
 
 function toast(text) {
@@ -80,9 +160,37 @@ function whenLabel(iso) {
   return dayTitle(iso).toLowerCase();
 }
 
+async function copy(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function join(block) {
+  const room = isUrl(block.place) ? block.place : '';
+  if (!room) return toast('Ссылки на эту пару пока нет');
+  const name = joinName();
+  const copied = name ? copy(name) : Promise.resolve(false);
+  const win = window.open(room, '_blank');
+  if (win) win.opener = null;
+  toast((await copied) ? 'Имя скопировано — вставь его в поле «Имя»' : (name ? `Имя для входа: ${name}` : 'Открываю комнату'));
+  if (!win) setTimeout(() => (location.href = room), 1500);
+}
+
+function fillGroupOptions() {
+  const list = groupList(schedule());
+  const current = group();
+  if (current && !list.includes(current)) list.unshift(current);
+  if (!list.includes('3426А')) list.unshift('3426А');
+  $('#groupOptions').innerHTML = [...new Set(list)].map(name => `<option value="${esc(name)}">`).join('');
+}
+
 function lessonCard(b, now) {
   const state = b.endMs <= now ? 'past' : b.startMs <= now ? 'now' : '';
-  const extra = [b.teacher, b.place, b.note].filter(Boolean).join(' · ');
+  const extra = [b.teacher, b.place && !isUrl(b.place) ? b.place : '', b.note].filter(Boolean).join(' · ');
   const room = isUrl(b.place) ? b.place : '';
   return `
     <div class="lesson ${state}">
@@ -92,7 +200,7 @@ function lessonCard(b, now) {
         <div class="meta">${esc(extra)}</div>
         <div class="row">
           ${state === 'now' ? '<span class="chip ok">идёт сейчас</span>' : ''}
-          ${room ? `<a class="btn small primary" href="${esc(room)}" target="_blank" rel="noopener">Войти</a>` : ''}
+          ${state !== 'past' && room ? `<button class="btn small primary" type="button" data-action="join" data-date="${b.date}" data-start="${b.start}">Войти</button>` : ''}
         </div>
       </div>
     </div>`;
@@ -109,13 +217,18 @@ function renderHero(now) {
     return;
   }
   const live = next.startMs <= now;
+  const room = isUrl(next.place) ? next.place : '';
   hero.innerHTML = `
     <div class="state">${live ? 'Идёт пара' : 'Следующая пара'}</div>
     <div class="subject">${esc(next.subject)}</div>
     <div class="countdown">${live
       ? `до конца ${duration(next.endMs - now)} (в ${next.end})`
       : `${whenLabel(next.date)} в ${next.start} — через ${duration(next.startMs - now)}`}
-      <div class="muted small">${esc([next.teacher, next.place].filter(Boolean).join(' · '))}</div></div>`;
+      <div class="muted small">${esc([next.teacher, next.place && !isUrl(next.place) ? next.place : ''].filter(Boolean).join(' · '))}</div></div>
+    <div class="actions">
+      ${room ? `<button class="btn primary" type="button" data-action="join" data-date="${next.date}" data-start="${next.start}">Войти на пару</button>` : ''}
+      <button class="btn" type="button" data-action="copy-chat">Скопировать «я на паре»</button>
+    </div>`;
 }
 
 function renderToday(now) {
@@ -147,24 +260,29 @@ function renderWeek(now) {
 
 function renderMore() {
   const g = group();
-  const list = groupList(schedule());
-  $('#groupSelect').innerHTML = list.map(name =>
-    `<option value="${esc(name)}" ${name === g ? 'selected' : ''}>${esc(name)}</option>`).join('');
   $('#links').innerHTML = (config.links || []).map(l =>
     `<a class="btn" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.title)}</a>`).join('');
   const days = Object.keys(daysOf(schedule(), g)).sort();
   const fetched = schedule().fetchedAt ? new Date(schedule().fetchedAt).toLocaleString('ru-RU') : '—';
   $('#schedInfo').textContent = `Группа ${g}. Дней в расписании: ${days.length}${days.length ? ` (${days[0]} … ${days[days.length - 1]})` : ''}. Источник: скриншоты. Обновлено: ${fetched}.`;
-  if ($('#sessionInfo')) {
-    $('#sessionInfo').textContent = session
-      ? `Вход: ${session.name || session.username}. Сессия хранится на этом устройстве, пока не нажмёшь «Выйти».`
-      : '';
-  }
+}
+
+function renderProfile() {
+  const p = profile();
+  $('#pFio').value = p.fio;
+  $('#pGroup').value = p.group;
+  fillGroupOptions();
+  $('#joinNameBox').textContent = joinName() || 'Сначала сохрани ФИО';
+  $('#sessionInfo').textContent = session
+    ? `Логин ${session.username}${isAdmin() ? ' · админ' : ''}. Сессия на этом устройстве, пока не нажмёшь «Выйти».`
+    : '';
 }
 
 function renderClock(now) {
   const d = collegeNow(now);
-  $('#clock').textContent = `${dayTitle(todayISO(now))}, ${d.toISOString().slice(11, 16)} · ${group()}`;
+  const name = fio();
+  $('#who').textContent = [name, group()].filter(Boolean).join(' · ');
+  $('#clock').textContent = `${dayTitle(todayISO(now))}, ${d.toISOString().slice(11, 16)}`;
 }
 
 function renderAll() {
@@ -174,9 +292,12 @@ function renderAll() {
   renderToday(now);
   renderWeek(now);
   renderMore();
+  renderProfile();
+  if (admin) admin.render();
 }
 
 function showTab(name) {
+  if (name === 'admin' && !isAdmin()) name = 'today';
   document.querySelectorAll('[data-view]').forEach(s => (s.hidden = s.dataset.view !== name));
   document.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
   LS.set('tab', name);
@@ -214,7 +335,6 @@ async function openSchedule(dataKey) {
   setTimezone(sched.timezoneOffsetHours ?? cfg.timezoneOffsetHours ?? 3);
   try { local = JSON.parse(LS.get('local-schedule') || '{"groups":{}}'); } catch { local = { groups: {} }; }
   local.groups ||= {};
-  if (!LS.get('group')) LS.set('group', cfg.group || sched.defaultGroup || '3426А');
 }
 
 function showLogin(err) {
@@ -222,6 +342,7 @@ function showLogin(err) {
   $('#login').hidden = false;
   $('#loginErr').hidden = !err;
   $('#loginErr').textContent = err || '';
+  $('#loginUser').value = LS.get(LAST_USER_KEY) || 'vsevolod';
   $('#loginPass')?.focus();
 }
 
@@ -230,15 +351,38 @@ function showApp() {
   $('#app').hidden = false;
 }
 
+async function ensureAdmin() {
+  $('#adminTab').hidden = !isAdmin();
+  if (!isAdmin()) {
+    admin = null;
+    return;
+  }
+  if (admin) return;
+  const { initAdmin } = await import('./admin.js');
+  admin = initAdmin({
+    esc, toast, LS, fetchJSON, repo, canWrite, ghHeaders,
+    dataKey: () => session.dataKey,
+    defaultGroup: () => group() || '3426А',
+    setToken(t) { LS.set(TOKEN_KEY, t); },
+  });
+}
+
 async function boot(dataKey) {
   await openSchedule(dataKey);
   showApp();
+  await ensureAdmin();
   if (!started) {
     started = true;
-    showTab(LS.get('tab') || 'today');
+    const tab = LS.get('tab');
+    showTab(tab === 'admin' && !isAdmin() ? 'today' : tab || 'today');
     setInterval(() => { const now = Date.now(); renderClock(now); renderHero(now); renderToday(now); }, 30000);
   }
   renderAll();
+}
+
+function roleOf(user) {
+  if (user.role === 'admin' || String(user.username).toLowerCase() === 'vsevolod') return 'admin';
+  return user.role || 'user';
 }
 
 async function login(username, password) {
@@ -247,7 +391,16 @@ async function login(username, password) {
   const user = (auth.users || []).find(u => String(u.username).toLowerCase() === id);
   if (!user) throw new Error('Неверный логин или пароль');
   const dataKey = await unwrapKey(user, password);
-  saveSession({ username: user.username, name: user.name, dataKey, at: Date.now() });
+  LS.set(LAST_USER_KEY, user.username);
+  saveSession({
+    username: user.username,
+    name: user.name,
+    group: user.group || config.group || '3426А',
+    role: roleOf(user),
+    dataKey,
+    at: Date.now(),
+  });
+  seedProfile(user);
   await boot(dataKey);
 }
 
@@ -257,16 +410,40 @@ document.addEventListener('click', e => {
   if (go) showTab(go.dataset.go);
 });
 
+document.addEventListener('click', async e => {
+  const el = e.target.closest('[data-action]');
+  if (!el) return;
+  const { action, date, start } = el.dataset;
+  if (action === 'join') {
+    const b = blocksForDate(schedule(), date, group()).find(x => x.start === start);
+    if (b) join(b);
+  } else if (action === 'copy-chat') {
+    toast((await copy(chatText())) ? 'Скопировано: «' + chatText() + '»' : chatText());
+  }
+});
+
 $('#weekPrev').onclick = () => { weekStart = addDays(weekStart, -7); renderWeek(Date.now()); };
 $('#weekNext').onclick = () => { weekStart = addDays(weekStart, 7); renderWeek(Date.now()); };
 $('#weekLabel').onclick = () => { weekStart = mondayOf(todayISO()); renderWeek(Date.now()); };
 
-$('#groupSelect').onchange = () => {
-  LS.set('group', $('#groupSelect').value);
+$('#lDate').value = todayISO();
+
+$('#profileForm').addEventListener('submit', e => {
+  e.preventDefault();
+  saveProfile({ fio: $('#pFio').value, group: $('#pGroup').value });
   renderAll();
+  toast('Профиль сохранён на этом устройстве');
+});
+
+$('#copyJoinBtn').onclick = async () => {
+  const name = joinName();
+  if (!name) return toast('Сначала сохрани ФИО');
+  toast((await copy(name)) ? 'Скопировано: «' + name + '»' : name);
 };
 
-$('#lDate').value = todayISO();
+$('#copyChatBtn').onclick = async () => {
+  toast((await copy(chatText())) ? 'Скопировано: «' + chatText() + '»' : chatText());
+};
 
 $('#lessonForm').addEventListener('submit', e => {
   e.preventDefault();
@@ -352,6 +529,7 @@ $('#loginForm').addEventListener('submit', async e => {
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 
 session = readSession();
+$('#loginUser').value = LS.get(LAST_USER_KEY) || session?.username || 'vsevolod';
 if (session?.dataKey) {
   try {
     await boot(session.dataKey);
