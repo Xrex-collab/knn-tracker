@@ -1,0 +1,37 @@
+name: Enable GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  pages: write
+  contents: read
+
+jobs:
+  enable:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enable Pages from main /docs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if gh api "repos/${GITHUB_REPOSITORY}/pages" >/tmp/pages.json 2>/tmp/pages.err; then
+            echo "Pages already exists; ensuring source is main /docs"
+            gh api --method PUT "repos/${GITHUB_REPOSITORY}/pages" \
+              -H "Accept: application/vnd.github+json" \
+              -f build_type=legacy \
+              -f 'source[branch]=main' \
+              -f 'source[path]=/docs'
+          else
+            echo "Creating Pages site"
+            cat /tmp/pages.err || true
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/pages" \
+              -H "Accept: application/vnd.github+json" \
+              -f build_type=legacy \
+              -f 'source[branch]=main' \
+              -f 'source[path]=/docs'
+          fi
+          gh api "repos/${GITHUB_REPOSITORY}/pages"
