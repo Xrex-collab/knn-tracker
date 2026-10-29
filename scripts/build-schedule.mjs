@@ -1,5 +1,7 @@
-// Собирает docs/data/schedule.json из разобранных скриншотов 29.10.2026.
-import { writeJSON, SCHEDULE_FILE, ROOT } from './lib/common.mjs';
+// Собирает открытый JSON в state/ и шифротекст для Pages в docs/data/schedule.json.
+import { writeJSON, SCHEDULE_FILE, SCHEDULE_ENC_FILE, ROOT } from './lib/common.mjs';
+import { dataKey, loadSecrets } from './lib/secrets.mjs';
+import { encryptJSON } from '../docs/js/crypto.js';
 
 const DATE = '2026-10-29';
 const TIMES = [
@@ -68,13 +70,17 @@ const schedule = {
   fetchedAt: new Date().toISOString(),
   source: 'screenshots',
   screenshots: [
-    'data/screenshots/schedule-2026-10-29-a.png',
-    'data/screenshots/schedule-2026-10-29-b.png',
+    'state/screenshots/schedule-2026-10-29-a.png',
+    'state/screenshots/schedule-2026-10-29-b.png',
   ],
   groups,
 };
 
 writeJSON(SCHEDULE_FILE, schedule);
+loadSecrets();
+if (process.env.DATA_KEY) {
+  writeJSON(SCHEDULE_ENC_FILE, await encryptJSON(schedule, dataKey()));
+}
 const n = Object.keys(groups).length;
 const lessons3426 = groups['3426А'][DATE].length;
 console.log(`Групп: ${n}. 3426А на ${DATE}: ${lessons3426} пар. Файл: ${SCHEDULE_FILE.replace(ROOT + '/', '')}`);

@@ -1,5 +1,5 @@
-const CACHE = 'knn-tracker-v1';
-const SHELL = ['./', 'index.html', 'style.css', 'js/app.js', 'js/lessons.js', 'icon.svg', 'manifest.webmanifest'];
+const CACHE = 'knn-tracker-v2';
+const SHELL = ['./', 'index.html', 'style.css', 'js/app.js', 'js/crypto.js', 'js/lessons.js', 'icon.svg', 'manifest.webmanifest'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -14,7 +14,7 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== location.origin) return;
-  if (url.pathname.includes('/data/') || url.pathname.endsWith('config.json')) return;
+  if (url.pathname.includes('/data/') || url.pathname.endsWith('config.json') || url.pathname.endsWith('auth.json')) return;
   e.respondWith(
     fetch(e.request)
       .then(res => {

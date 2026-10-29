@@ -13,7 +13,24 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div id="app">
+  <section id="login" class="login">
+    <img src="icon.svg" alt="" width="64" height="64">
+    <h1>КНН трекер</h1>
+    <p class="muted">Группа 3426А. Личный вход — расписание закрыто паролем.</p>
+    <form id="loginForm">
+      <label>Логин
+        <input id="loginUser" type="text" name="username" autocomplete="username" value="vsevolod" required>
+      </label>
+      <label>Пароль
+        <input id="loginPass" type="password" name="password" autocomplete="current-password" placeholder="Пароль" required>
+      </label>
+      <button class="btn primary" type="submit">Войти</button>
+      <p id="loginErr" class="error" hidden></p>
+    </form>
+    <p class="muted small">Это замок от чужих глаз на GitHub Pages, не банковская защита.</p>
+  </section>
+
+  <div id="app" hidden>
     <header class="top">
       <div>
         <div class="title">КНН трекер</div>
@@ -48,7 +65,7 @@
       <section data-view="more" hidden>
         <div class="card form">
           <h2>Скрин расписания</h2>
-          <p class="muted small">Сфоткай таблицу (как в КНН) и добавь пары. Напоминания в MAX читают JSON из репозитория — после правок скачай файл и закоммить <code>docs/data/schedule.json</code>.</p>
+          <p class="muted small">Сфоткай таблицу (как в КНН) и добавь пары. Напоминания в MAX читают открытый JSON в <code>state/schedule-data.json</code>. Для сайта его шифруют: <code>node scripts/users.mjs encrypt</code>.</p>
           <label>Фото<input id="shotInput" type="file" accept="image/*" capture="environment" multiple></label>
           <div id="shotPreview" class="shots"></div>
         </div>
@@ -84,6 +101,11 @@
             <button id="exportBtn" class="btn" type="button">Скачать JSON</button>
             <button id="resetLocalBtn" class="btn" type="button">Сбросить правки на телефоне</button>
           </div>
+        </div>
+        <div class="card form">
+          <h2>Сессия</h2>
+          <p id="sessionInfo" class="muted small"></p>
+          <button id="logoutBtn" class="btn danger" type="button">Выйти на этом устройстве</button>
         </div>
       </section>
     </main>
