@@ -41,6 +41,12 @@ export function groupList(schedule) {
   return schedule.group ? [schedule.group] : [];
 }
 
+// "3426", "3426-А", "3426a" -> "3426А"
+export function normGroup(v) {
+  const s = String(v ?? '').toUpperCase().replace(/A/g, 'А').replace(/[\s\-–]/g, '');
+  return /^\d+$/.test(s) ? s + 'А' : s;
+}
+
 export function daysOf(schedule, group) {
   const g = group || schedule.defaultGroup || schedule.group;
   if (schedule.groups && g && schedule.groups[g]) return schedule.groups[g];
