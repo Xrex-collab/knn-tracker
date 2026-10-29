@@ -5,6 +5,8 @@
   "scripts": {
     "notify": "node scripts/notify.mjs",
     "serve": "node scripts/serve.mjs",
-    "check": "node scripts/check.mjs"
+    "check": "node scripts/check.mjs",
+    "encrypt": "node scripts/users.mjs encrypt",
+    "users": "node scripts/users.mjs"
   }
 }

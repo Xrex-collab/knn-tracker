@@ -1,6 +1,7 @@
+import { decryptJSON, unwrapKey } from './crypto.js';
 import {
   addDays, blocksForDate, collegeNow, dayTitle, daysOf, groupList, setTimezone,
-  todayISO, upcomingBlocks, plural,
+  todayISO, upcomingBlocks,
 } from './lessons.js';
 
 const $ = sel => document.querySelector(sel);
@@ -11,11 +12,24 @@ const LS = {
   set(k, v) { try { localStorage.setItem(k, v); } catch {} },
   del(k) { try { localStorage.removeItem(k); } catch {} },
 };
+const SESSION_KEY = 'knn.session';
 
 let config = { group: '3426А', timezoneOffsetHours: 3, links: [] };
 let base = null;
 let local = null;
+let session = null;
+let started = false;
 let weekStart = mondayOf(todayISO());
+
+function readSession() {
+  try { return JSON.parse(LS.get(SESSION_KEY) || 'null'); } catch { return null; }
+}
+
+function saveSession(next) {
+  session = next;
+  if (next) LS.set(SESSION_KEY, JSON.stringify(next));
+  else LS.del(SESSION_KEY);
+}
 
 function mondayOf(iso) {
   const day = new Date(iso + 'T00:00:00Z').getUTCDay() || 7;
@@ -141,6 +155,11 @@ function renderMore() {
   const days = Object.keys(daysOf(schedule(), g)).sort();
   const fetched = schedule().fetchedAt ? new Date(schedule().fetchedAt).toLocaleString('ru-RU') : '—';
   $('#schedInfo').textContent = `Группа ${g}. Дней в расписании: ${days.length}${days.length ? ` (${days[0]} … ${days[days.length - 1]})` : ''}. Источник: скриншоты. Обновлено: ${fetched}.`;
+  if ($('#sessionInfo')) {
+    $('#sessionInfo').textContent = session
+      ? `Вход: ${session.name || session.username}. Сессия хранится на этом устройстве, пока не нажмёшь «Выйти».`
+      : '';
+  }
 }
 
 function renderClock(now) {
@@ -177,17 +196,59 @@ function exportJSON() {
   URL.revokeObjectURL(a.href);
 }
 
-async function load() {
-  const [cfg, sched] = await Promise.all([
-    fetch('config.json', { cache: 'no-store' }).then(r => r.json()),
-    fetch('data/schedule.json', { cache: 'no-store' }).then(r => r.json()),
+async function fetchJSON(path) {
+  const res = await fetch(path, { cache: 'no-store' });
+  if (!res.ok) throw new Error(`${path}: ${res.status}`);
+  return res.json();
+}
+
+async function openSchedule(dataKey) {
+  const [cfg, box] = await Promise.all([
+    fetchJSON('config.json'),
+    fetchJSON('data/schedule.json'),
   ]);
+  const sched = await decryptJSON(box, dataKey);
+  if (!sched?.groups) throw new Error('Файл расписания пуст');
   config = cfg;
   base = sched;
   setTimezone(sched.timezoneOffsetHours ?? cfg.timezoneOffsetHours ?? 3);
   try { local = JSON.parse(LS.get('local-schedule') || '{"groups":{}}'); } catch { local = { groups: {} }; }
   local.groups ||= {};
   if (!LS.get('group')) LS.set('group', cfg.group || sched.defaultGroup || '3426А');
+}
+
+function showLogin(err) {
+  $('#app').hidden = true;
+  $('#login').hidden = false;
+  $('#loginErr').hidden = !err;
+  $('#loginErr').textContent = err || '';
+  $('#loginPass')?.focus();
+}
+
+function showApp() {
+  $('#login').hidden = true;
+  $('#app').hidden = false;
+}
+
+async function boot(dataKey) {
+  await openSchedule(dataKey);
+  showApp();
+  if (!started) {
+    started = true;
+    showTab(LS.get('tab') || 'today');
+    setInterval(() => { const now = Date.now(); renderClock(now); renderHero(now); renderToday(now); }, 30000);
+  }
+  renderAll();
+}
+
+async function login(username, password) {
+  const auth = await fetchJSON('auth.json');
+  const id = String(username || '').trim().toLowerCase();
+  const user = (auth.users || []).find(u => String(u.username).toLowerCase() === id);
+  if (!user) throw new Error('Неверный логин или пароль');
+  const dataKey = await unwrapKey(user, password);
+  saveSession({ username: user.username, name: user.name, dataKey, at: Date.now() });
+  await boot(dataKey);
 }
 
 document.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
@@ -253,16 +314,51 @@ $('#resetLocalBtn').onclick = () => {
 };
 
 $('#reloadBtn').onclick = async () => {
-  try { await load(); renderAll(); toast('Обновлено'); } catch (e) { toast('Ошибка: ' + e.message); }
+  try {
+    if (!session?.dataKey) return showLogin();
+    await openSchedule(session.dataKey);
+    renderAll();
+    toast('Обновлено');
+  } catch (e) {
+    toast('Ошибка: ' + e.message);
+  }
 };
+
+$('#logoutBtn').onclick = () => {
+  if (!confirm('Выйти на этом устройстве? Расписание снова закроется паролем.')) return;
+  saveSession(null);
+  LS.del('local-schedule');
+  base = null;
+  local = { groups: {} };
+  location.reload();
+};
+
+$('#loginForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const btn = e.target.querySelector('button[type="submit"]');
+  btn.disabled = true;
+  $('#loginErr').hidden = true;
+  try {
+    await login($('#loginUser').value, $('#loginPass').value);
+  } catch (err) {
+    const msg = err.name === 'OperationError' ? 'Неверный логин или пароль' : (err.message || 'Не удалось войти');
+    showLogin(msg);
+  } finally {
+    btn.disabled = false;
+    $('#loginPass').value = '';
+  }
+});
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 
-try {
-  await load();
-  showTab(LS.get('tab') || 'today');
-  renderAll();
-  setInterval(() => { const now = Date.now(); renderClock(now); renderHero(now); renderToday(now); }, 30000);
-} catch (e) {
-  $('#hero').innerHTML = `<div class="state">Ошибка</div><div class="subject">${esc(e.message)}</div>`;
+session = readSession();
+if (session?.dataKey) {
+  try {
+    await boot(session.dataKey);
+  } catch {
+    saveSession(null);
+    showLogin('Сессия устарела — войди снова');
+  }
+} else {
+  showLogin();
 }

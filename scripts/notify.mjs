@@ -11,11 +11,15 @@ const dry = args.includes('--dry');
 const nowArg = args.includes('--now') ? args[args.indexOf('--now') + 1] : null;
 
 if (!existsSync(SCHEDULE_FILE)) {
-  console.log('Нет docs/data/schedule.json — нечего напоминать');
+  console.log('Нет state/schedule-data.json — нечего напоминать');
   process.exit(0);
 }
 
 const schedule = readJSON(SCHEDULE_FILE);
+if (!schedule?.groups) {
+  console.log('state/schedule-data.json без поля groups — нечего напоминать');
+  process.exit(0);
+}
 const tz = schedule.timezoneOffsetHours ?? config.timezoneOffsetHours ?? TZ_OFFSET_HOURS;
 setTimezone(tz);
 const group = config.group || schedule.defaultGroup || '3426А';
