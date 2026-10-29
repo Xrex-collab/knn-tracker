@@ -1,0 +1,12 @@
+{
+  "group": "3426А",
+  "timezoneOffsetHours": 3,
+  "notify": {
+    "remindBeforeMin": 20,
+    "digestAt": "07:00"
+  },
+  "links": [
+    { "title": "Dist КНН", "url": "https://dist.knn-nk.ru/" },
+    { "title": "learn.webflare", "url": "https://learn.webflare.space/dashboard" }
+  ]
+}

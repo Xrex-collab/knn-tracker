@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>КНН трекер</title>
+  <meta name="theme-color" content="#8b1e3f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="КНН">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <header class="top">
+      <div>
+        <div class="title">КНН трекер</div>
+        <div id="clock" class="muted small"></div>
+      </div>
+      <button id="reloadBtn" class="icon-btn" title="Обновить" aria-label="Обновить">⟳</button>
+    </header>
+
+    <main>
+      <section data-view="today">
+        <div id="hero" class="card hero"></div>
+        <div id="uploadBanner" class="card upload-banner" hidden>
+          <div>
+            <div class="subj">Загрузи скрин расписания</div>
+            <p class="muted small">Пока в файле есть только 29.10.2026. Добавь фото следующей недели — пары можно поправить руками.</p>
+          </div>
+          <button class="btn primary" data-go="more">Загрузить</button>
+        </div>
+        <h2>Сегодня</h2>
+        <div id="todayList"></div>
+      </section>
+
+      <section data-view="week" hidden>
+        <div class="week-nav">
+          <button id="weekPrev" class="btn">←</button>
+          <div id="weekLabel" class="week-label"></div>
+          <button id="weekNext" class="btn">→</button>
+        </div>
+        <div id="weekList"></div>
+      </section>
+
+      <section data-view="more" hidden>
+        <div class="card form">
+          <h2>Скрин расписания</h2>
+          <p class="muted small">Сфоткай таблицу (как в КНН) и добавь пары. Напоминания в MAX читают JSON из репозитория — после правок скачай файл и закоммить <code>docs/data/schedule.json</code>.</p>
+          <label>Фото<input id="shotInput" type="file" accept="image/*" capture="environment" multiple></label>
+          <div id="shotPreview" class="shots"></div>
+        </div>
+        <form id="lessonForm" class="card form">
+          <h2>Добавить пару</h2>
+          <label>Дата<input id="lDate" type="date" required></label>
+          <label>Начало<input id="lStart" type="time" required></label>
+          <label>Конец<input id="lEnd" type="time" required></label>
+          <label>Предмет<input id="lSubject" required autocomplete="off"></label>
+          <label>Преподаватель<input id="lTeacher" autocomplete="off"></label>
+          <label>Аудитория / ссылка<input id="lPlace" autocomplete="off"></label>
+          <button class="btn primary" type="submit">Сохранить пару</button>
+        </form>
+        <div class="card form">
+          <h2>Группа</h2>
+          <label>Номер группы
+            <select id="groupSelect"></select>
+          </label>
+          <p class="muted small">По умолчанию 3426А. Выбор хранится на этом телефоне.</p>
+        </div>
+        <div class="card">
+          <h2>Быстрые ссылки</h2>
+          <div id="links" class="links"></div>
+        </div>
+        <div class="card form">
+          <h2>На домашний экран</h2>
+          <p class="muted small">iPhone: «Поделиться» → «На экран „Домой“». Android: меню браузера → «Установить приложение».</p>
+        </div>
+        <div class="card form">
+          <h2>Расписание JSON</h2>
+          <p id="schedInfo" class="muted small"></p>
+          <div class="links">
+            <button id="exportBtn" class="btn" type="button">Скачать JSON</button>
+            <button id="resetLocalBtn" class="btn" type="button">Сбросить правки на телефоне</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <nav class="tabs">
+      <button data-tab="today" class="active">Сегодня</button>
+      <button data-tab="week">Неделя</button>
+      <button data-tab="more">Ещё</button>
+    </nav>
+  </div>
+  <div id="toast" class="toast" hidden></div>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

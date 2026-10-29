@@ -1,0 +1,10 @@
+{
+  "name": "knn-tracker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "notify": "node scripts/notify.mjs",
+    "serve": "node scripts/serve.mjs",
+    "check": "node scripts/check.mjs"
+  }
+}

@@ -1,0 +1,5 @@
+node_modules/
+*.dt
+secrets.local.txt
+.debug/
+.DS_Store
